@@ -7,13 +7,15 @@ using PedidoClientManagement.API.Data;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// 1) Connection string via env var (DATABASE_URL) ou appsettings
-var connectionString =
+// 1) Lê connection string (suporta formato URI e key-value)
+var rawConn =
     Environment.GetEnvironmentVariable("DATABASE_URL")
     ?? builder.Configuration.GetConnectionString("DefaultConnection")
-    ?? throw new InvalidOperationException("Connection string não configurada. Defina a variável de ambiente DATABASE_URL.");
+    ?? throw new InvalidOperationException("Connection string não configurada.");
 
-Console.WriteLine($"→ Conectando ao banco de dados...");
+// Converte formato URI (postgresql://user:pass@host:port/db) para key-value do Npgsql
+var connectionString = ConverterParaNpgsql(rawConn);
+Console.WriteLine("→ Conectando ao banco de dados...");
 
 // 2) EF + PostgreSQL
 builder.Services.AddDbContext<AppDbContext>(opt =>
@@ -36,7 +38,7 @@ builder.Services.AddDirectoryBrowser();
 
 var app = builder.Build();
 
-// **Auto-aplica migrações no startup**
+// Auto-aplica migrações no startup
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -48,15 +50,30 @@ if (app.Environment.IsDevelopment())
 
 app.UseCors();
 
-// default files -> wwwroot/index.html
 var df = new DefaultFilesOptions();
 df.DefaultFileNames.Clear();
 df.DefaultFileNames.Add("index.html");
 app.UseDefaultFiles(df);
 
 app.UseStaticFiles();
-
 app.UseAuthorization();
 app.MapControllers();
-
 app.Run();
+
+// Converte URI postgresql:// para formato key-value aceito pelo Npgsql
+static string ConverterParaNpgsql(string input)
+{
+    if (!input.StartsWith("postgresql://") && !input.StartsWith("postgres://"))
+        return input; // já está no formato key-value
+
+    var uri = new Uri(input);
+    var partes = uri.UserInfo.Split(':', 2);
+    var usuario = partes[0];
+    var senha    = partes.Length > 1 ? partes[1] : "";
+    var banco    = uri.AbsolutePath.TrimStart('/');
+    var porta    = uri.Port > 0 ? uri.Port : 5432;
+
+    return $"Host={uri.Host};Port={porta};Database={banco};" +
+           $"Username={usuario};Password={senha};" +
+           $"SSL Mode=Require;Trust Server Certificate=true";
+}
