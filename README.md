@@ -91,6 +91,4 @@ Exemplo para desenvolvimento local (`appsettings.Development.json`):
 
 O arquivo `schema.sql` na raiz do repositório contém o script completo para criação das tabelas no PostgreSQL.
 
-## Aplicação Publicada
 
-https://pedido-client-management.onrender.com
