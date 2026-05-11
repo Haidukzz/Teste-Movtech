@@ -13,7 +13,6 @@ var rawConn =
     ?? builder.Configuration.GetConnectionString("DefaultConnection")
     ?? throw new InvalidOperationException("Connection string não configurada.");
 
-// Converte formato URI (postgresql://user:pass@host:port/db) para key-value do Npgsql
 var connectionString = ConverterParaNpgsql(rawConn);
 Console.WriteLine("→ Conectando ao banco de dados...");
 
@@ -25,7 +24,7 @@ builder.Services.AddDbContext<AppDbContext>(opt =>
 builder.Services.AddCors(opt =>
     opt.AddDefaultPolicy(p => p.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
 
-// 4) Controllers + JSON cycles off
+// 4) Controllers + JSON
 builder.Services.AddControllers()
     .AddJsonOptions(opts =>
     {
@@ -38,11 +37,22 @@ builder.Services.AddDirectoryBrowser();
 
 var app = builder.Build();
 
-// Auto-aplica migrações no startup
+// Auto-aplica migrações e garante colunas adicionadas manualmente
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.Migrate();
+
+    // Garante que a coluna Endereco existe, independente do histórico de migrations
+    var conn = db.Database.GetDbConnection();
+    conn.Open();
+    using var cmd = conn.CreateCommand();
+    cmd.CommandText = @"
+        ALTER TABLE ""Clientes""
+        ADD COLUMN IF NOT EXISTS ""Endereco"" TEXT NOT NULL DEFAULT '';";
+    cmd.ExecuteNonQuery();
+    conn.Close();
+    Console.WriteLine("→ Coluna Endereco verificada/criada com sucesso.");
 }
 
 if (app.Environment.IsDevelopment())
@@ -64,7 +74,7 @@ app.Run();
 static string ConverterParaNpgsql(string input)
 {
     if (!input.StartsWith("postgresql://") && !input.StartsWith("postgres://"))
-        return input; // já está no formato key-value
+        return input;
 
     var uri = new Uri(input);
     var partes = uri.UserInfo.Split(':', 2);
